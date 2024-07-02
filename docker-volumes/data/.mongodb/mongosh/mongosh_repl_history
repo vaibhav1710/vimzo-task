@@ -1,0 +1,23 @@
+db.blogs.find()
+db.blogs.drop()
+db.blogs.find()
+db.users.drop()
+db.users.find()
+db.users.drop()
+show collections
+use vimzo_task
+show databases
+db.blogs.find()
+show collections
+use vimzo_task
+show vimzo_task
+vimzo_task
+show databases
+db.users.find()
+show collections
+show collection
+use vimzo_task
+show databases
+show database
+show databases
+show db
