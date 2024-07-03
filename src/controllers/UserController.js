@@ -4,7 +4,6 @@ const jwt = require("jsonwebtoken");
 
 const maxAge = 30 * 24 * 60 * 60; // 30 days
 const createToken = (id) => {
-  //console.log(id);
   return jwt.sign({ id }, process.env.SECRET, {
     expiresIn: maxAge,
   });
@@ -35,7 +34,7 @@ module.exports.login = async (req, res) => {
     if (!user) {
       throw new Error("Invalid credentials");
     }
-    //console.log(user._id);
+    
     const token = createToken(user._id);
     res.cookie("jwt", token, { httpOnly: true, maxAge: maxAge });
     res.status(201).json({ message: "User loggedin successfully" });
