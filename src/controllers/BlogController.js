@@ -32,11 +32,13 @@ module.exports.getBlogbyId = async (req, res) => {
   try {
     const { id: blogId } = req.params;
 
+    // looking for the blog in redis client with key as blog and it's id 
     const cacheBlog = await client.get(`blog:${blogId}`);
     if (cacheBlog) {
       return res.status(200).json(JSON.parse(cacheBlog));
     }
-
+     
+    // populating the fields of blog after retreiving from db
     const blog = await Blog.findById(blogId).populate(
       "author",
       "username email"
@@ -44,7 +46,8 @@ module.exports.getBlogbyId = async (req, res) => {
     if (!blog) {
       return res.status(404).json({ error: "Blog post not found" });
     }
-
+  
+    // caching for further use
     await client.set(`blog:${blogId}`, JSON.stringify(blog), {
       EX: 60 * 60,
     });
@@ -63,14 +66,18 @@ module.exports.createBlog = async (req, res) => {
     const { title, content, image } = req.body;
     let imageUrl = "";
     console.log(req.file);
+    // If there's a file uploaded (using multer or similar middleware), upload it to Cloudinary
     if (req.file && req.file.path) {
       const result = await cloudinary.uploader.upload(req.file.path);
       imageUrl = result.secure_url;
     }
-
+ 
+    // Extract the JWT token from cookies and decode it to get the user's ID
     const token = req.cookies.jwt;
     const decoded = jwt.verify(token, process.env.SECRET);
     const { id } = decoded;
+
+    // Create a new blog post in MongoDB using Mongoose's Blog model
     const blog = await Blog.create({
       title: title,
       content: content,
@@ -78,6 +85,7 @@ module.exports.createBlog = async (req, res) => {
       image: imageUrl,
     });
 
+     // Populate the 'author' field of the blog post with username and email
     const populatedBlog = await blog.populate("author", "username email");
     console.log(populatedBlog);
     await client.set(
@@ -87,7 +95,8 @@ module.exports.createBlog = async (req, res) => {
         EX: 60 * 60,
       }
     );
-
+ 
+    // Clear the cached list of all blogs to ensure it gets refreshed
     await client.del("blogs");
     res.status(201).json(populatedBlog);
   } catch (error) {
@@ -98,11 +107,18 @@ module.exports.createBlog = async (req, res) => {
 
 module.exports.updateBlog = async (req, res) => {
   try {
+    // Extract blog ID from request parameters
     const { id: blogId } = req.params;
+
+    // Extract title, content, image
     const { title, content, image } = req.body;
+
+    // Extract user ID from JWT token in cookies
     const token = req.cookies.jwt;
     const decoded = jwt.verify(token, process.env.SECRET);
     const userId = decoded.id;
+
+    
     const blog = await Blog.findById(blogId);
 
     if (!blog) {
@@ -175,27 +191,37 @@ exports.deleteBlog = async (req, res) => {
   }
 };
 
+// Controller function to fetch filtered blog posts
 module.exports.getFilteredPost = async (req, res) => {
+
+  // Destructure query parameters qtitle and qauthor from req.query
   const { qtitle, qauthor } = req.query;
 
   try {
+    // Initialize an empty query object for MongoDB find operation
     let query = {};
+     // Create a MongoDB regex query to match blog titles case-insensitively
     if (qtitle) {
       query["title"] = { $regex: qtitle, $options: "i" };
     }
 
+    // Initialize an empty authorQuery object for finding users by username
     let authorQuery = {};
 
+    // Check if qauthor query parameter is provided
     if (qauthor) {
+      // Create a MongoDB regex query to match usernames case-insensitively
       authorQuery["username"] = { $regex: qauthor, $options: "i" };
     }
-
+  // Find users (authors) matching the authorQuery
     const authors = await User.find(authorQuery).select("_id");
 
+     // If authors are found, add their IDs to the query to filter by author
     if (authors.length > 0) {
       query["author"] = { $in: authors.map((author) => author._id) };
     }
-
+    
+     // Find blog posts in MongoDB matching the combined query
     const blogs = await Blog.find(query)
       .populate({
         path: "author",
@@ -203,6 +229,7 @@ module.exports.getFilteredPost = async (req, res) => {
       })
       .exec();
 
+     // Filter out any blog posts where the author field is null (due to non-matching query) 
     const filteredBlogs = blogs.filter((blog) => blog.author !== null);
 
     res.status(200).json(filteredBlogs);
